@@ -152,17 +152,283 @@ Ready to build the highway to success? Let's lay the foundation! 🏗️
 
 ## 📦 Deployment
 
-### 🚀 Highway Express Deploy
-1. **📁 Package**: Bundle your code and dependencies like construction materials
-2. **⬆️ Upload**: Deploy to AWS Lambda with highway-grade settings
-3. **⚙️ Configure**: Set up CloudWatch Events for scheduled construction runs
-4. **🎯 Test**: Trigger manually to verify highway connection
+This section covers three deployment methods for the SANRAL Tender Processing Lambda Service. Choose the method that best fits your workflow and infrastructure preferences.
 
-### 🔧 Environment Variables
-- `SQS_QUEUE_URL`: Target queue for processed highway tenders
-- `API_TIMEOUT`: Request timeout for SANRAL API calls
-- `SCRAPING_TIMEOUT`: Timeout for web scraping operations
-- `BATCH_SIZE`: Number of tenders per SQS construction batch (default: 10)
+### 🛠️ Prerequisites
+
+Before deploying, ensure you have:
+- AWS CLI configured with appropriate credentials 🔑
+- AWS SAM CLI installed (`pip install aws-sam-cli`)
+- Python 3.13 runtime support in your target region
+- Access to AWS Lambda, SQS, and CloudWatch Logs services ☁️
+- Required Python dependencies: `beautifulsoup4` and `requests`
+
+### 🎯 Method 1: AWS Toolkit Deployment
+
+Deploy directly through your IDE using the AWS Toolkit extension.
+
+#### Setup Steps:
+1. **Install AWS Toolkit** in your IDE (VS Code, IntelliJ, etc.)
+2. **Configure AWS Profile** with your credentials
+3. **Open Project** containing `lambda_function.py` and `models.py`
+
+#### Deploy Process:
+1. **Right-click** on `lambda_function.py` in your IDE
+2. **Select** "Deploy Lambda Function" from AWS Toolkit menu
+3. **Configure Deployment**:
+   - Function Name: `SanralFunction`
+   - Runtime: `python3.13`
+   - Handler: `lambda_function.lambda_handler`
+   - Memory: `128 MB`
+   - Timeout: `120 seconds`
+4. **Add Layers** manually after deployment:
+   - beautifulsoup4-library layer
+   - requests-library layer
+5. **Set Environment Variables** as needed
+6. **Configure IAM Permissions** for SQS, Logs, and EC2 (for VPC if needed)
+
+#### Post-Deployment:
+- Test the function using the AWS Toolkit test feature
+- Monitor logs through CloudWatch integration
+- Update function code directly from IDE for quick iterations
+
+### 🚀 Method 2: SAM Deployment
+
+Use AWS SAM for infrastructure-as-code deployment with the provided template.
+
+#### Initial Setup:
+```bash
+# Install AWS SAM CLI
+pip install aws-sam-cli
+
+# Verify installation
+sam --version
+```
+
+#### Create Required Layer Directories:
+Since the template references layers not included in the repository, create them:
+
+```bash
+# Create layer directories
+mkdir -p beautifulsoup4-library/python
+mkdir -p requests-library/python
+
+# Install beautifulsoup4 layer
+pip install beautifulsoup4 -t beautifulsoup4-library/python/
+
+# Install requests layer  
+pip install requests -t requests-library/python/
+```
+
+#### Build and Deploy:
+```bash
+# Build the SAM application
+sam build
+
+# Deploy with guided configuration (first time)
+sam deploy --guided
+
+# Follow the prompts:
+# Stack Name: sanral-lambda-stack
+# AWS Region: us-east-1 (or your preferred region)
+# Confirm changes before deploy: Y
+# Allow SAM to create IAM roles: Y
+# Save parameters to samconfig.toml: Y
+```
+
+#### Subsequent Deployments:
+```bash
+# Quick deployment after initial setup
+sam build && sam deploy
+```
+
+#### Local Testing with SAM:
+```bash
+# Test function locally
+sam local invoke SanralFunction
+
+# Start local API Gateway (if needed)
+sam local start-api
+```
+
+#### SAM Deployment Advantages:
+- ✅ Complete infrastructure management
+- ✅ Automatic layer creation and management
+- ✅ IAM permissions defined in template
+- ✅ Easy rollback capabilities
+- ✅ CloudFormation integration
+
+### 🔄 Method 3: Workflow Deployment (CI/CD)
+
+Automated deployment using GitHub Actions workflow for production environments.
+
+#### Setup Requirements:
+1. **GitHub Repository Secrets**:
+   ```
+   AWS_ACCESS_KEY_ID: Your AWS access key
+   AWS_SECRET_ACCESS_KEY: Your AWS secret key
+   AWS_REGION: us-east-1 (or your target region)
+   ```
+
+2. **Pre-existing Lambda Function**: The workflow updates an existing function, so deploy initially using Method 1 or 2.
+
+#### Deployment Process:
+1. **Create Release Branch**:
+   ```bash
+   # Create and switch to release branch
+   git checkout -b release
+   
+   # Make your changes to lambda_function.py or models.py
+   # Commit changes
+   git add .
+   git commit -m "feat: update SANRAL tender processing logic"
+   
+   # Push to trigger deployment
+   git push origin release
+   ```
+
+2. **Automatic Deployment**: The workflow will:
+   - Checkout the code
+   - Configure AWS credentials
+   - Create deployment zip with `lambda_function.py` and `models.py`
+   - Update the existing Lambda function code
+   - Maintain existing configuration (layers, environment variables, etc.)
+
+#### Manual Trigger:
+You can also trigger deployment manually:
+1. Go to **Actions** tab in your GitHub repository
+2. Select **"Deploy Python Scraper to AWS"** workflow
+3. Click **"Run workflow"**
+4. Choose the `release` branch
+5. Click **"Run workflow"** button
+
+#### Workflow Deployment Advantages:
+- ✅ Automated CI/CD pipeline
+- ✅ Consistent deployment process
+- ✅ Audit trail of deployments
+- ✅ Easy rollback to previous commits
+- ✅ No local environment dependencies
+
+### 🔧 Post-Deployment Configuration
+
+Regardless of deployment method, configure the following:
+
+#### Environment Variables:
+```bash
+SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/211635102441/AIQueue.fifo
+API_TIMEOUT=30
+SCRAPING_TIMEOUT=30
+BATCH_SIZE=10
+USER_AGENT=Mozilla/5.0 (compatible; SANRAL-Tender-Bot/1.0)
+```
+
+#### CloudWatch Events (Optional):
+Set up scheduled execution:
+```bash
+# Create CloudWatch Events rule for daily execution
+aws events put-rule \
+    --name "SanralLambdaSchedule" \
+    --schedule-expression "cron(0 9 * * ? *)" \
+    --description "Daily SANRAL tender scraping"
+
+# Add Lambda as target
+aws events put-targets \
+    --rule "SanralLambdaSchedule" \
+    --targets "Id"="1","Arn"="arn:aws:lambda:us-east-1:211635102441:function:SanralFunction"
+```
+
+### 🧪 Testing Your Deployment
+
+After deployment, test the function:
+
+```bash
+# Test via AWS CLI
+aws lambda invoke \
+    --function-name SanralFunction \
+    --payload '{}' \
+    response.json
+
+# Check the response
+cat response.json
+```
+
+#### Expected Success Indicators:
+- ✅ Function executes without errors
+- ✅ CloudWatch logs show successful API calls and scraping activity
+- ✅ SQS queue receives tender messages
+- ✅ No timeout or memory errors
+- ✅ Valid JSON tender data in queue messages
+
+### 🔍 Monitoring and Maintenance
+
+#### CloudWatch Metrics to Monitor:
+- **Duration**: Function execution time
+- **Error Rate**: Failed invocations
+- **Memory Utilization**: RAM usage patterns
+- **Throttles**: Concurrent execution limits
+
+#### Log Analysis:
+```bash
+# View recent logs
+aws logs tail /aws/lambda/SanralFunction --follow
+
+# Search for errors
+aws logs filter-log-events \
+    --log-group-name /aws/lambda/SanralFunction \
+    --filter-pattern "ERROR"
+```
+
+### 🚨 Troubleshooting Deployments
+
+<details>
+<summary><strong>Layer Dependencies Missing</strong></summary>
+
+**Issue**: `beautifulsoup4` or `requests` import errors
+
+**Solution**: Ensure layers are properly created and attached:
+```bash
+# For SAM: Verify layer directories exist and contain packages
+ls -la beautifulsoup4-library/python/
+ls -la requests-library/python/
+
+# For manual deployment: Create and upload layers separately
+```
+</details>
+
+<details>
+<summary><strong>IAM Permission Errors</strong></summary>
+
+**Issue**: Access denied for SQS or CloudWatch operations
+
+**Solution**: Verify the Lambda execution role has required permissions:
+- `sqs:SendMessage`
+- `sqs:GetQueueUrl` 
+- `sqs:GetQueueAttributes`
+- `logs:CreateLogGroup`
+- `logs:CreateLogStream`
+- `logs:PutLogEvents`
+- `ec2:CreateNetworkInterface`
+- `ec2:DeleteNetworkInterface`
+- `ec2:DescribeNetworkInterfaces`
+</details>
+
+<details>
+<summary><strong>Workflow Deployment Fails</strong></summary>
+
+**Issue**: GitHub Actions workflow errors
+
+**Solution**: Check repository secrets are correctly configured and the target Lambda function exists in AWS.
+</details>
+
+<details>
+<summary><strong>API Connection Issues</strong></summary>
+
+**Issue**: Cannot connect to SANRAL API endpoints
+
+**Solution**: Verify network connectivity and consider VPC configuration if the Lambda needs specific network access.
+</details>
+
+Choose the deployment method that best fits your development workflow and infrastructure requirements. SAM deployment is recommended for development environments, while workflow deployment excels for production CI/CD pipelines.
 
 ## 🧰 Troubleshooting
 
